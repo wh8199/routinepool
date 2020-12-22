@@ -3,7 +3,13 @@ package routinepool
 type worker struct {
 	taskChan chan func()
 
-	updateTime int64
+	lastSheduleTime int64
+}
+
+func NewWorker() *worker {
+	return &worker{
+		taskChan: make(chan func()),
+	}
 }
 
 func (w worker) Start() {

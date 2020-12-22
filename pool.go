@@ -8,7 +8,7 @@ type RoutinePool struct {
 	WorkerNumber int64 `json:"workerNumber"`
 	Lock         sync.Mutex
 
-	Workers []*worker
+	ReadyWorkers []*worker
 }
 
 func NewRoutinePool(config *RoutinePoolConfig) *RoutinePool {
@@ -19,10 +19,25 @@ func NewRoutinePool(config *RoutinePoolConfig) *RoutinePool {
 	}
 }
 
-func (r RoutinePool) getReadyWorker() *worker {
-	return nil
+func (r *RoutinePool) getReadyWorker() *worker {
+	r.Lock.Lock()
+	defer r.Lock.Unlock()
+
+	if len(r.ReadyWorkers) > 0 {
+		w := r.ReadyWorkers[len(r.ReadyWorkers)-1]
+		r.ReadyWorkers = r.ReadyWorkers[:len(r.ReadyWorkers)-1]
+		return w
+	}
+
+	r.WorkerNumber++
+	w := NewWorker()
+	go w.Start()
+
+	return w
 }
 
 func (r RoutinePool) SubmitWorker(f func()) {
-	//go f()
+	w := r.getReadyWorker()
+
+	w.taskChan <- f
 }
