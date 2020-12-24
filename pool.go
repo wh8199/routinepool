@@ -1,6 +1,10 @@
 package routinepool
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+	"time"
+)
 
 type RoutinePool struct {
 	Config *RoutinePoolConfig
@@ -19,9 +23,19 @@ func NewRoutinePool(config *RoutinePoolConfig) *RoutinePool {
 	}
 }
 
+func (r *RoutinePool) Start() {
+	for {
+		fmt.Println(r.WorkerNumber)
+
+		time.Sleep(5 * time.Second)
+	}
+}
+
 func (r *RoutinePool) getReadyWorker() *worker {
 	r.Lock.Lock()
 	defer r.Lock.Unlock()
+
+	r.WorkerNumber = r.WorkerNumber + 1
 
 	if len(r.ReadyWorkers) > 0 {
 		w := r.ReadyWorkers[len(r.ReadyWorkers)-1]
@@ -29,15 +43,24 @@ func (r *RoutinePool) getReadyWorker() *worker {
 		return w
 	}
 
-	r.WorkerNumber++
-	w := NewWorker()
+	w := NewWorker(r)
 	go w.Start()
 
 	return w
 }
 
-func (r RoutinePool) SubmitWorker(f func()) {
+func (r *RoutinePool) SubmitWorker(f func()) {
 	w := r.getReadyWorker()
 
 	w.taskChan <- f
+}
+
+func (r *RoutinePool) Recycle(w *worker) {
+	w.lastSheduleTime = time.Now().Unix()
+
+	r.Lock.Lock()
+	defer r.Lock.Unlock()
+
+	r.ReadyWorkers = append(r.ReadyWorkers, w)
+	r.WorkerNumber = r.WorkerNumber - 1
 }
