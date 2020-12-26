@@ -9,11 +9,18 @@ import (
 
 func main() {
 	config := routinepool.DefaultRouterPoolConfig()
+	config.WithCleanWorkerInterval("10s")
+	config.WithMaxIdleTime("20s")
 	pool := routinepool.NewRoutinePool(config)
 
 	pool.SubmitWorker(func() {
 		time.Sleep(1 * time.Second)
-		fmt.Println("sss")
+		fmt.Println("worker1")
+	})
+
+	pool.SubmitWorker(func() {
+		time.Sleep(2 * time.Second)
+		fmt.Println("worker2")
 	})
 
 	pool.Start()

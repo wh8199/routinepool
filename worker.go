@@ -1,17 +1,18 @@
 package routinepool
 
+import "time"
+
 type worker struct {
-	taskChan chan func()
-
-	lastSheduleTime int64
-
-	pool *RoutinePool
+	taskChan        chan func()
+	lastSheduleTime time.Time
+	pool            *RoutinePool
 }
 
 func NewWorker(pool *RoutinePool) *worker {
 	return &worker{
-		taskChan: make(chan func()),
-		pool:     pool,
+		taskChan:        make(chan func()),
+		pool:            pool,
+		lastSheduleTime: time.Now(),
 	}
 }
 
@@ -22,7 +23,6 @@ func (w *worker) Start() {
 		}
 
 		f()
-
 		w.pool.Recycle(w)
 	}
 }
