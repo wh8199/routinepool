@@ -1,6 +1,10 @@
 package routinepool
 
-import "time"
+import (
+	"time"
+
+	"github.com/wh8199/log"
+)
 
 const (
 	DefaultWorkerCleanInterval = time.Minute
@@ -8,9 +12,10 @@ const (
 )
 
 type RoutinePoolConfig struct {
-	MaxWorkperNumber int64         `json:"maxWorkerNumber"`
-	CleanInterval    time.Duration `json:"cleanInterval"`
-	MaxIdleTime      time.Duration `json:"maxIdleTime"`
+	MaxWorkperNumber int64            `json:"maxWorkerNumber"`
+	CleanInterval    time.Duration    `json:"cleanInterval"`
+	MaxIdleTime      time.Duration    `json:"maxIdleTime"`
+	LogLevel         log.LoggingLevel `json:"logLevel"`
 }
 
 func DefaultRouterPoolConfig() *RoutinePoolConfig {
@@ -18,6 +23,7 @@ func DefaultRouterPoolConfig() *RoutinePoolConfig {
 		MaxWorkperNumber: 1024,
 		CleanInterval:    DefaultWorkerCleanInterval,
 		MaxIdleTime:      DefaultMaxIdleTime,
+		LogLevel:         log.ERROR_LEVEL,
 	}
 }
 
@@ -43,4 +49,8 @@ func (r *RoutinePoolConfig) WithMaxIdleTime(maxIdleTime string) {
 	}
 
 	r.MaxIdleTime = maxIdleTimeDuration
+}
+
+func (r *RoutinePoolConfig) WithLogLevel(logLevel log.LoggingLevel) {
+	r.LogLevel = logLevel
 }
