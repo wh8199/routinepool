@@ -8,40 +8,44 @@ import (
 )
 
 type RoutinePool struct {
-	Config *RoutinePoolConfig
-
-	WorkerNumber int64 `json:"workerNumber"`
-	Lock         sync.Mutex
-
-	Log          log.LoggingInterface
-	ReadyWorkers []*worker
+	config       *RoutinePoolConfig
+	workerNumber int64
+	lock         sync.Mutex
+	log          log.LoggingInterface
+	readyWorkers []*worker
 }
 
 func NewRoutinePool(config *RoutinePoolConfig) *RoutinePool {
 	return &RoutinePool{
-		Config:       config,
-		WorkerNumber: 0,
-		Lock:         sync.Mutex{},
-		Log:          log.NewLogging("routinepool", config.LogLevel, 2),
+		config:       config,
+		workerNumber: 0,
+		lock:         sync.Mutex{},
+		log:          log.NewLogging("routinepool", config.LogLevel, 2),
 	}
 }
 
 func (r *RoutinePool) Start() {
-	r.StartCleanWorkers()
+	go r.StartCleanWorkers()
+
+	for {
+		r.log.Debugf("Current worker number: %d", r.workerNumber)
+		r.log.Debugf("Current number of ready worker: %d", len(r.readyWorkers))
+		time.Sleep(10 * time.Second)
+	}
 }
 
 func (r *RoutinePool) cleanWorkerOnce() {
-	r.Lock.Lock()
-	defer r.Lock.Unlock()
+	r.lock.Lock()
+	defer r.lock.Unlock()
 
-	if len(r.ReadyWorkers) == 0 {
+	if len(r.readyWorkers) == 0 {
 		return
 	}
 
 	cutIndex := -1
 	now := time.Now()
-	for index, worker := range r.ReadyWorkers {
-		if now.After(worker.lastSheduleTime.Add(r.Config.MaxIdleTime)) {
+	for index, worker := range r.readyWorkers {
+		if now.After(worker.lastSheduleTime.Add(r.config.MaxIdleTime)) {
 			cutIndex = index
 			break
 		}
@@ -51,35 +55,35 @@ func (r *RoutinePool) cleanWorkerOnce() {
 		return
 	}
 
-	if len(r.ReadyWorkers) == 1 {
-		r.ReadyWorkers = []*worker{}
+	if len(r.readyWorkers) == 1 {
+		r.readyWorkers = []*worker{}
 	} else {
-		r.ReadyWorkers = r.ReadyWorkers[cutIndex+1:]
+		r.readyWorkers = r.readyWorkers[cutIndex+1:]
 	}
 }
 
 func (r *RoutinePool) StartCleanWorkers() {
-	ticker := time.NewTicker(r.Config.CleanInterval)
+	ticker := time.NewTicker(r.config.CleanInterval)
 
 	for {
 		select {
 		case <-ticker.C:
-			r.Log.Debug("Start clean workers")
+			r.log.Debug("Start clean workers")
 			r.cleanWorkerOnce()
-			r.Log.Debug("Clean worker done")
+			r.log.Debug("Clean worker done")
 		}
 	}
 }
 
 func (r *RoutinePool) getReadyWorker() *worker {
-	r.Lock.Lock()
-	defer r.Lock.Unlock()
+	r.lock.Lock()
+	defer r.lock.Unlock()
 
-	r.WorkerNumber = r.WorkerNumber + 1
+	r.workerNumber = r.workerNumber + 1
 
-	if len(r.ReadyWorkers) > 0 {
-		w := r.ReadyWorkers[len(r.ReadyWorkers)-1]
-		r.ReadyWorkers = r.ReadyWorkers[:len(r.ReadyWorkers)-1]
+	if len(r.readyWorkers) > 0 {
+		w := r.readyWorkers[len(r.readyWorkers)-1]
+		r.readyWorkers = r.readyWorkers[:len(r.readyWorkers)-1]
 		return w
 	}
 
@@ -98,9 +102,9 @@ func (r *RoutinePool) SubmitWorker(f func()) {
 func (r *RoutinePool) Recycle(w *worker) {
 	w.lastSheduleTime = time.Now()
 
-	r.Lock.Lock()
-	defer r.Lock.Unlock()
+	r.lock.Lock()
+	defer r.lock.Unlock()
 
-	r.ReadyWorkers = append(r.ReadyWorkers, w)
-	r.WorkerNumber = r.WorkerNumber - 1
+	r.readyWorkers = append(r.readyWorkers, w)
+	r.workerNumber = r.workerNumber - 1
 }
