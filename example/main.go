@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/wh8199/log"
 	"github.com/wh8199/routinepool"
 )
 
@@ -11,6 +12,7 @@ func main() {
 	config := routinepool.DefaultRouterPoolConfig()
 	config.WithCleanWorkerInterval("10s")
 	config.WithMaxIdleTime("20s")
+	config.WithLogLevel(log.DEBUG_LEVEL)
 	pool := routinepool.NewRoutinePool(config)
 
 	pool.SubmitWorker(func() {
