@@ -13,15 +13,25 @@ type RoutinePool struct {
 	lock         sync.Mutex
 	log          log.LoggingInterface
 	readyWorkers []*worker
+
+	workerPool sync.Pool
 }
 
 func NewRoutinePool(config *RoutinePoolConfig) *RoutinePool {
-	return &RoutinePool{
+	routinePool := &RoutinePool{
 		config:       config,
 		workerNumber: 0,
 		lock:         sync.Mutex{},
 		log:          log.NewLogging("routinepool", config.LogLevel, 2),
+		workerPool:   sync.Pool{},
 	}
+
+	routinePool.workerPool.New = func() interface{} {
+		w := NewWorker(routinePool)
+		return w
+	}
+
+	return routinePool
 }
 
 func (r *RoutinePool) Start() {
@@ -55,6 +65,12 @@ func (r *RoutinePool) cleanWorkerOnce() {
 		return
 	}
 
+	cleanWorkers := r.readyWorkers[:cutIndex]
+	for _, worker := range cleanWorkers {
+		worker.Stop()
+		r.workerPool.Put(worker)
+	}
+
 	if len(r.readyWorkers) == 1 {
 		r.readyWorkers = []*worker{}
 	} else {
@@ -75,7 +91,7 @@ func (r *RoutinePool) StartCleanWorkers() {
 	}
 }
 
-func (r *RoutinePool) getReadyWorker() *worker {
+func (r *RoutinePool) getReadyWorkerWithoutPool() *worker {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -88,6 +104,24 @@ func (r *RoutinePool) getReadyWorker() *worker {
 	}
 
 	w := NewWorker(r)
+	go w.Start()
+
+	return w
+}
+
+func (r *RoutinePool) getReadyWorker() *worker {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.workerNumber = r.workerNumber + 1
+
+	if len(r.readyWorkers) > 0 {
+		w := r.readyWorkers[len(r.readyWorkers)-1]
+		r.readyWorkers = r.readyWorkers[:len(r.readyWorkers)-1]
+		return w
+	}
+
+	w := r.workerPool.Get().(*worker)
 	go w.Start()
 
 	return w
