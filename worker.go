@@ -23,12 +23,11 @@ func (w *worker) Stop() {
 }
 
 func (w *worker) Start() {
-	for f := range w.taskChan {
-		if f == nil {
-			return
+	for {
+		select {
+		case f := <-w.taskChan:
+			f()
+			w.pool.Recycle(w)
 		}
-
-		f()
-		w.pool.Recycle(w)
 	}
 }
