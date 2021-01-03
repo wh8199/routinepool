@@ -1,10 +1,6 @@
 package routinepool
 
-import (
-	"sync"
-	"testing"
-)
-
+/*
 func BenchmarkCreatingWorker(b *testing.B) {
 	config := DefaultRouterPoolConfig()
 	pool := NewRoutinePool(config)
@@ -68,3 +64,4 @@ func BenchmarkPool(b *testing.B) {
 	wg.Wait()
 	b.StopTimer()
 }
+*/

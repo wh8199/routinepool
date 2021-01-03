@@ -2,143 +2,64 @@ package routinepool
 
 import (
 	"sync"
-	"time"
 
 	"github.com/wh8199/log"
 )
 
 type RoutinePool struct {
 	config       *RoutinePoolConfig
-	workerNumber int64
-	lock         sync.Mutex
+	workerNumber uint64
+	lock         sync.RWMutex
 	log          log.LoggingInterface
-	readyWorkers []*worker
-
-	workerPool sync.Pool
+	readyWorker  uint64
+	workerChan   chan func()
 }
 
 func NewRoutinePool(config *RoutinePoolConfig) *RoutinePool {
 	routinePool := &RoutinePool{
 		config:       config,
 		workerNumber: 0,
-		lock:         sync.Mutex{},
+		lock:         sync.RWMutex{},
 		log:          log.NewLogging("routinepool", config.LogLevel, 2),
-		workerPool:   sync.Pool{},
-	}
-
-	routinePool.workerPool.New = func() interface{} {
-		w := NewWorker(routinePool)
-		return w
+		readyWorker:  0,
+		workerChan:   make(chan func(), 128),
 	}
 
 	return routinePool
 }
 
-func (r *RoutinePool) Start() {
-	go r.StartCleanWorkers()
-
-	for {
-		r.log.Debugf("Current worker number: %d", r.workerNumber)
-		r.log.Debugf("Current number of ready worker: %d", len(r.readyWorkers))
-		time.Sleep(10 * time.Second)
-	}
-}
-
-func (r *RoutinePool) cleanWorkerOnce() {
+func (r *RoutinePool) SubmitWorker(f func()) {
+	createWorker := false
 	r.lock.Lock()
-	defer r.lock.Unlock()
+	if r.readyWorker <= 0 {
+		createWorker = true
+	}
+	r.lock.Unlock()
 
-	if len(r.readyWorkers) == 0 {
+	if createWorker {
+		go r.startWorker()
+		r.workerChan <- f
 		return
 	}
 
-	cutIndex := -1
-	now := time.Now()
-	for index, worker := range r.readyWorkers {
-		if now.After(worker.lastSheduleTime.Add(r.config.MaxIdleTime)) {
-			cutIndex = index
-			break
-		}
-	}
-
-	if cutIndex == -1 {
-		return
-	}
-
-	cleanWorkers := r.readyWorkers[:cutIndex]
-	for _, worker := range cleanWorkers {
-		worker.Stop()
-		r.workerPool.Put(worker)
-	}
-
-	if len(r.readyWorkers) == 1 {
-		r.readyWorkers = []*worker{}
-	} else {
-		r.readyWorkers = r.readyWorkers[cutIndex+1:]
-	}
+	r.lock.Lock()
+	r.workerChan <- f
+	r.readyWorker--
+	r.lock.Unlock()
 }
 
-func (r *RoutinePool) StartCleanWorkers() {
-	ticker := time.NewTicker(r.config.CleanInterval)
+func (r *RoutinePool) donewWorker() {
+	r.lock.Lock()
+	r.readyWorker++
+	r.lock.Unlock()
+}
 
+func (r *RoutinePool) startWorker() {
 	for {
 		select {
-		case <-ticker.C:
-			r.log.Debug("Start clean workers")
-			r.cleanWorkerOnce()
-			r.log.Debug("Clean worker done")
+		case f := <-r.workerChan:
+			f()
+			r.donewWorker()
 		}
 	}
-}
-
-func (r *RoutinePool) getReadyWorkerWithoutPool() *worker {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	r.workerNumber = r.workerNumber + 1
-
-	if len(r.readyWorkers) > 0 {
-		w := r.readyWorkers[len(r.readyWorkers)-1]
-		r.readyWorkers = r.readyWorkers[:len(r.readyWorkers)-1]
-		return w
-	}
-
-	w := NewWorker(r)
-	go w.Start()
-
-	return w
-}
-
-func (r *RoutinePool) getReadyWorker() *worker {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	r.workerNumber = r.workerNumber + 1
-
-	if len(r.readyWorkers) > 0 {
-		w := r.readyWorkers[len(r.readyWorkers)-1]
-		r.readyWorkers = r.readyWorkers[:len(r.readyWorkers)-1]
-		return w
-	}
-
-	w := r.workerPool.Get().(*worker)
-	go w.Start()
-
-	return w
-}
-
-func (r *RoutinePool) SubmitWorker(f func()) {
-	w := r.getReadyWorker()
-
-	w.taskChan <- f
-}
-
-func (r *RoutinePool) Recycle(w *worker) {
-	w.lastSheduleTime = time.Now()
-
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	r.readyWorkers = append(r.readyWorkers, w)
-	r.workerNumber = r.workerNumber - 1
 }

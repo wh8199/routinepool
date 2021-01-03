@@ -7,13 +7,13 @@ import (
 type worker struct {
 	taskChan        chan func()
 	lastSheduleTime time.Time
-	pool            *RoutinePool
+	//pool            *RoutinePool
 }
 
 func NewWorker(pool *RoutinePool) *worker {
 	return &worker{
-		taskChan:        make(chan func()),
-		pool:            pool,
+		taskChan: make(chan func()),
+		//pool:            pool,
 		lastSheduleTime: time.Now(),
 	}
 }
@@ -27,7 +27,7 @@ func (w *worker) Start() {
 		select {
 		case f := <-w.taskChan:
 			f()
-			w.pool.Recycle(w)
+			//w.pool.Recycle(w)
 		}
 	}
 }

@@ -1,11 +1,12 @@
 package routinepool
 
 import (
-	"math/rand"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/wh8199/log"
 )
 
 var curMem uint64
@@ -17,12 +18,11 @@ const (
 )
 
 const (
-	n = 400000000
+	n = 1000000
 )
 
 func demoFunc() {
 	time.Sleep(time.Duration(10) * time.Microsecond)
-	rand.Int()
 }
 
 func TestNoPool(t *testing.T) {
@@ -46,14 +46,12 @@ func TestPool(t *testing.T) {
 	config := DefaultRouterPoolConfig()
 	config.WithCleanWorkerInterval("60s")
 	config.WithMaxIdleTime("120s")
+	config.WithLogLevel(log.DEBUG_LEVEL)
 	pool := NewRoutinePool(config)
-
-	go pool.StartCleanWorkers()
 
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
-
 		pool.SubmitWorker(func() {
 			demoFunc()
 			wg.Done()
@@ -61,6 +59,8 @@ func TestPool(t *testing.T) {
 	}
 
 	wg.Wait()
+	t.Log(pool.readyWorker)
+
 	mem := runtime.MemStats{}
 	runtime.ReadMemStats(&mem)
 	curMem = mem.TotalAlloc/MiB - curMem
